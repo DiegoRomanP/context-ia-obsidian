@@ -54,9 +54,10 @@ export class SettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Esfuerzo de razonamiento")
+      .setDesc("Controla cuánto \"piensa\" el modelo antes de responder (deepseek-v4-flash).")
       .addDropdown((d) =>
         d
-          .addOptions({ low: "low", medium: "medium", high: "high" })
+          .addOptions({ none: "none (rápido)", high: "high (por defecto)", max: "max (más profundo)" })
           .setValue(this.plugin.settings.reasoningEffort)
           .onChange(async (v) => {
             await this.plugin.updateSettings({ reasoningEffort: v as ReasoningEffort });

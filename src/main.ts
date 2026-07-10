@@ -2,13 +2,21 @@ import { FileSystemAdapter, Notice, Plugin } from "obsidian";
 import path from "path";
 import type { VaultPort } from "./domain/ports/VaultPort";
 import type { SecretsPort } from "./domain/ports/SecretsPort";
+import type { LLMPort } from "./domain/ports/LLMPort";
 import type { PluginSettings } from "./domain/models/PluginSettings";
 import { DEFAULT_SETTINGS } from "./domain/models/PluginSettings";
 import { NoteContextService } from "./services/NoteContextService";
+import { NvidiaLLMService } from "./services/NvidiaLLMService";
 import { DotenvSecretsAdapter } from "./secrets/DotenvSecretsAdapter";
 import { SettingsSecretsAdapter } from "./secrets/SettingsSecretsAdapter";
 import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
+import {
+  InvalidKeyError,
+  RateLimitError,
+  NetworkError,
+  EmptyResponseError,
+} from "./errors/ApiErrors";
 
 export default class ContextIaPlugin extends Plugin {
   declare settings: PluginSettings;
@@ -33,6 +41,19 @@ export default class ContextIaPlugin extends Plugin {
         new ResultModal(this.app, `Contexto: ${ctx.title}`, JSON.stringify(ctx, null, 2)).open();
       },
     });
+
+    this.addCommand({
+      id: "summarize-note",
+      name: "Resumir nota activa con IA",
+      callback: () =>
+        this.runAction(async (vault, llm) => {
+          const ctx = await vault.getActiveNoteContext();
+          if (!ctx) throw new Error("Abre una nota markdown primero.");
+          const body = await vault.readNote(ctx.path);
+          const result = await llm.summarize(ctx, body);
+          new ResultModal(this.app, `Resumen: ${ctx.title}`, result.text).open();
+        }),
+    });
   }
 
   async onunload(): Promise<void> {}
@@ -42,6 +63,29 @@ export default class ContextIaPlugin extends Plugin {
     return this.settings.secretSource === "dotenv"
       ? new DotenvSecretsAdapter(this.resolveEnvPath())
       : new SettingsSecretsAdapter(this.app);
+  }
+
+  /** Servicio de IA vigente según settings (baseUrl, modelo, esfuerzo de razonamiento). */
+  get llm(): LLMPort {
+    return new NvidiaLLMService(
+      this.secrets,
+      this.settings.baseUrl,
+      this.settings.textModel,
+      this.settings.reasoningEffort,
+    );
+  }
+
+  /** Centraliza el manejo de errores de las acciones de IA: nunca un crash silencioso. */
+  private async runAction(fn: (vault: VaultPort, llm: LLMPort) => Promise<void>): Promise<void> {
+    try {
+      await fn(this.vault, this.llm);
+    } catch (e) {
+      if (e instanceof InvalidKeyError) new Notice("🔑 " + e.message);
+      else if (e instanceof RateLimitError) new Notice("⏳ " + e.message);
+      else if (e instanceof NetworkError) new Notice("📡 " + e.message);
+      else if (e instanceof EmptyResponseError) new Notice("🕳️ El modelo no devolvió contenido.");
+      else new Notice("⚠️ " + (e as Error).message);
+    }
   }
 
   async loadSettings(): Promise<void> {

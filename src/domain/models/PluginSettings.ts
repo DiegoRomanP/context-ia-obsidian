@@ -1,7 +1,10 @@
 import { DEFAULT_BASE_URL, DEFAULT_IMAGE_MODEL, DEFAULT_TEXT_MODEL } from "../../config/constants";
 
 export type SecretSource = "dotenv" | "settings";
-export type ReasoningEffort = "low" | "medium" | "high";
+// Valores reales aceptados por NVIDIA NIM para deepseek-v4-flash (confirmado contra
+// docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-flash-infer). NO son
+// "low"/"medium"/"high" genéricos: es el parámetro `reasoning_effort` de nivel raíz.
+export type ReasoningEffort = "none" | "high" | "max";
 
 export interface PluginSettings {
   readonly secretSource: SecretSource; // de dónde leer las claves
