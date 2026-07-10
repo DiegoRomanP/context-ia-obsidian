@@ -4,6 +4,7 @@
 [![CodeQL](https://github.com/DiegoRomanP/context-ia-obsidian/actions/workflows/codeql.yml/badge.svg)](https://github.com/DiegoRomanP/context-ia-obsidian/actions/workflows/codeql.yml)
 [![Secret Scan](https://github.com/DiegoRomanP/context-ia-obsidian/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/DiegoRomanP/context-ia-obsidian/actions/workflows/secret-scan.yml)
 [![Release](https://img.shields.io/github/v/release/DiegoRomanP/context-ia-obsidian)](https://github.com/DiegoRomanP/context-ia-obsidian/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 Plugin para [Obsidian](https://obsidian.md) que lee la nota activa y sus relaciones
 (links salientes, backlinks, headings) y ofrece cuatro acciones de IA sobre ese
@@ -188,4 +189,4 @@ descargar una versión concreta.
 
 ## Licencia
 
-Aún no definida — pendiente de decisión del autor.
+[MIT](./LICENSE) © 2026 Diego Roman
