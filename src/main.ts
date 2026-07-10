@@ -20,7 +20,7 @@ import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
 import { PromptModal } from "./ui/PromptModal";
 import { sanitizeFileNamePart } from "./utils/sanitize";
-import { MIN_ACTION_INTERVAL_MS } from "./config/constants";
+import { MIN_ACTION_INTERVAL_MS, DEFAULT_IMAGE_BASE_URL } from "./config/constants";
 import {
   InvalidKeyError,
   RateLimitError,
@@ -156,9 +156,13 @@ export default class ContextIaPlugin extends Plugin {
     return new TavilySearchService(this.secrets);
   }
 
-  /** Servicio de generación de imágenes vigente (mismo host/credencial que llm). */
+  /**
+   * Servicio de generación de imágenes vigente. Usa un host DISTINTO al de llm/search:
+   * los modelos de imagen de NVIDIA ("Visual GenAI") se sirven en ai.api.nvidia.com,
+   * no en el host OpenAI-compatible de chat/completions.
+   */
   get images(): ImagePort {
-    return new NvidiaImageService(this.secrets, this.settings.baseUrl, this.settings.imageModel);
+    return new NvidiaImageService(this.secrets, DEFAULT_IMAGE_BASE_URL, this.settings.imageModel);
   }
 
   /**
@@ -198,7 +202,8 @@ export default class ContextIaPlugin extends Plugin {
     const folder = "attachments";
     await this.app.vault.adapter.mkdir(folder).catch(() => {}); // idempotente
     const safeTitle = sanitizeFileNamePart(ctx.title);
-    const name = `${folder}/ia-${safeTitle}-${Date.now()}.png`;
+    const ext = result.mimeType === "image/png" ? "png" : "jpg";
+    const name = `${folder}/ia-${safeTitle}-${Date.now()}.${ext}`;
     // .slice() copia los bytes a un ArrayBuffer propio (offset 0, longitud exacta): evita escribir
     // el pool interno de Node completo si Buffer.from reusó un buffer compartido más grande.
     await this.app.vault.createBinary(name, result.bytes.slice().buffer as ArrayBuffer);
