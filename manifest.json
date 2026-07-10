@@ -1,7 +1,7 @@
 {
   "id": "context-ia-obsidian",
   "name": "Context IA",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "minAppVersion": "1.11.4",
   "description": "Lee la nota activa y sus relaciones para resumir, explicar, investigar y generar imágenes con IA.",
   "author": "Diego Roman",
