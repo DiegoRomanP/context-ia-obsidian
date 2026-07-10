@@ -2,10 +2,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requestUrl } from "obsidian";
 import { NvidiaLLMService } from "../src/services/NvidiaLLMService";
 import type { SecretsPort } from "../src/domain/ports/SecretsPort";
-import { InvalidKeyError, RateLimitError, UpstreamError, EmptyResponseError } from "../src/errors/ApiErrors";
+import type { NoteContext } from "../src/domain/models/NoteContext";
+import {
+  InvalidKeyError,
+  RateLimitError,
+  UpstreamError,
+  EmptyResponseError,
+  EmptySelectionError,
+} from "../src/errors/ApiErrors";
 
 const URL = "https://integrate.api.nvidia.com/v1";
 const MODEL = "deepseek-ai/deepseek-v4-flash";
+
+const ctxFixture: NoteContext = {
+  path: "A.md",
+  title: "A",
+  outgoingLinks: [],
+  backlinks: [],
+  headings: [],
+  wordCount: 0,
+};
 
 function fakeSecrets(value: string | null): SecretsPort {
   return { get: async () => value };
@@ -82,14 +98,32 @@ describe("NvidiaLLMService.summarize", () => {
       json: { choices: [{ message: { content: "" } }] },
     } as any);
     const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
-    const ctx = {
-      path: "A.md",
-      title: "A",
-      outgoingLinks: [],
-      backlinks: [],
-      headings: [],
-      wordCount: 0,
-    };
-    await expect(svc.summarize(ctx, "")).rejects.toBeInstanceOf(EmptyResponseError);
+    await expect(svc.summarize(ctxFixture, "")).rejects.toBeInstanceOf(EmptyResponseError);
+  });
+});
+
+describe("NvidiaLLMService.explain", () => {
+  it("lanza EmptySelectionError con selección vacía, sin llamar a la red", async () => {
+    const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
+    await expect(svc.explain("   ", ctxFixture)).rejects.toBeInstanceOf(EmptySelectionError);
+    expect(mockRequestUrl).not.toHaveBeenCalled();
+  });
+
+  it("explica una selección válida", async () => {
+    mockRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { choices: [{ message: { content: "explicación" } }] },
+    } as any);
+    const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
+    expect((await svc.explain("texto", ctxFixture)).text).toBe("explicación");
+  });
+
+  it("lanza EmptyResponseError si el modelo no devuelve contenido para la explicación", async () => {
+    mockRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { choices: [{ message: { content: "" } }] },
+    } as any);
+    const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
+    await expect(svc.explain("texto", ctxFixture)).rejects.toBeInstanceOf(EmptyResponseError);
   });
 });

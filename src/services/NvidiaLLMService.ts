@@ -10,6 +10,7 @@ import {
   NetworkError,
   EmptyResponseError,
   UpstreamError,
+  EmptySelectionError,
 } from "../errors/ApiErrors";
 import { REQUEST_TIMEOUT_MS } from "../config/constants";
 
@@ -30,6 +31,22 @@ export class NvidiaLLMService implements LLMPort {
       { role: "user", content: this.buildSummaryPrompt(context, noteBody) },
     ];
     const res = await this.chat(messages, { maxTokens: 2048 });
+    if (!res.content.trim()) throw new EmptyResponseError("Respuesta vacía del modelo");
+    return { text: res.content, reasoning: res.reasoning, model: this.model };
+  }
+
+  async explain(selection: string, context: NoteContext): Promise<SummaryResult> {
+    const trimmed = selection.trim();
+    if (!trimmed) throw new EmptySelectionError("Selecciona el texto que quieres explicar.");
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: "Explicas fragmentos de texto de forma clara y didáctica en español." },
+      {
+        role: "user",
+        content: `En la nota "${context.title}", explica este fragmento en detalle y con un ejemplo si aplica:\n\n"""${trimmed}"""`,
+      },
+    ];
+    const res = await this.chat(messages, { maxTokens: 1500 });
     if (!res.content.trim()) throw new EmptyResponseError("Respuesta vacía del modelo");
     return { text: res.content, reasoning: res.reasoning, model: this.model };
   }

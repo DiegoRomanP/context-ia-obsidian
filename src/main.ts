@@ -16,6 +16,7 @@ import {
   RateLimitError,
   NetworkError,
   EmptyResponseError,
+  EmptySelectionError,
 } from "./errors/ApiErrors";
 
 export default class ContextIaPlugin extends Plugin {
@@ -54,6 +55,19 @@ export default class ContextIaPlugin extends Plugin {
           new ResultModal(this.app, `Resumen: ${ctx.title}`, result.text).open();
         }),
     });
+
+    this.addCommand({
+      id: "explain-selection",
+      name: "Explicar selección con IA",
+      editorCallback: (editor) =>
+        this.runAction(async (vault, llm) => {
+          const selection = editor.getSelection();
+          const ctx = await vault.getActiveNoteContext();
+          if (!ctx) throw new Error("Abre una nota markdown primero.");
+          const result = await llm.explain(selection, ctx); // lanza EmptySelectionError si vacío
+          new ResultModal(this.app, "Explicación", result.text).open();
+        }),
+    });
   }
 
   async onunload(): Promise<void> {}
@@ -84,6 +98,7 @@ export default class ContextIaPlugin extends Plugin {
       else if (e instanceof RateLimitError) new Notice("⏳ " + e.message);
       else if (e instanceof NetworkError) new Notice("📡 " + e.message);
       else if (e instanceof EmptyResponseError) new Notice("🕳️ El modelo no devolvió contenido.");
+      else if (e instanceof EmptySelectionError) new Notice("✍️ " + e.message);
       else new Notice("⚠️ " + (e as Error).message);
     }
   }

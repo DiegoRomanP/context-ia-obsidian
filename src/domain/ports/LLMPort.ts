@@ -8,6 +8,8 @@ export interface ChatMessage {
 
 export interface LLMPort {
   summarize(context: NoteContext, noteBody: string): Promise<SummaryResult>;
+  /** Reutiliza SummaryResult (campo text) — no crear un DTO casi idéntico (DRY). */
+  explain(selection: string, context: NoteContext): Promise<SummaryResult>;
   /** Primitiva reutilizada por Explicar/Investigar. */
   chat(messages: readonly ChatMessage[], opts?: ChatOptions): Promise<ChatResponse>;
 }
