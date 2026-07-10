@@ -1,0 +1,19 @@
+name: CI
+on:
+  push: { branches: ["main"] }
+  pull_request: { branches: ["main"] }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verificar que el bundle no contiene secretos
+        run: |
+          if grep -R "nvapi-" main.js; then echo "❌ Secreto en bundle"; exit 1; fi

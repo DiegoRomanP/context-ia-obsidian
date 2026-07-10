@@ -1,0 +1,19 @@
+name: Release
+on:
+  push: { tags: ["*"] }
+permissions: { contents: write }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - run: npm run build
+      - name: Crear release con los artefactos del plugin
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            main.js manifest.json \
+            --title "$GITHUB_REF_NAME" --generate-notes
