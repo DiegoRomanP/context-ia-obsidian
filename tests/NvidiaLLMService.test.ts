@@ -10,6 +10,7 @@ import {
   EmptyResponseError,
   EmptySelectionError,
 } from "../src/errors/ApiErrors";
+import { MAX_INPUT_CHARS } from "../src/config/constants";
 
 const URL = "https://integrate.api.nvidia.com/v1";
 const MODEL = "deepseek-ai/deepseek-v4-flash";
@@ -99,6 +100,27 @@ describe("NvidiaLLMService.summarize", () => {
     } as any);
     const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
     await expect(svc.summarize(ctxFixture, "")).rejects.toBeInstanceOf(EmptyResponseError);
+  });
+
+  it("marca truncated=true si el cuerpo de la nota excede MAX_INPUT_CHARS (Fase 7)", async () => {
+    mockRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { choices: [{ message: { content: "resumen" } }] },
+    } as any);
+    const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
+    const hugeBody = "a".repeat(MAX_INPUT_CHARS + 1000);
+    const result = await svc.summarize(ctxFixture, hugeBody);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("no marca truncated si el cuerpo cabe dentro del límite", async () => {
+    mockRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { choices: [{ message: { content: "resumen" } }] },
+    } as any);
+    const svc = new NvidiaLLMService(fakeSecrets("nvapi-x"), URL, MODEL, "high");
+    const result = await svc.summarize(ctxFixture, "nota corta");
+    expect(result.truncated).toBe(false);
   });
 });
 

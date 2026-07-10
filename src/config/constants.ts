@@ -7,3 +7,5 @@ export const REQUEST_TIMEOUT_MS = 60_000; // requestUrl no soporta timeout nativ
 export const MAX_TOOL_ITERATIONS = 4; // tope del loop de tool-calling (evita runaway)
 export const MAX_SEARCH_RESULTS = 5; // resultados por búsqueda en ResearchService
 export const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB: tope antes de escribir a disco
+export const MAX_INPUT_CHARS = 12_000; // truncado defensivo de nota/selección/resultados de búsqueda
+export const MIN_ACTION_INTERVAL_MS = 2_000; // evita golpear la API por doble-click en un comando

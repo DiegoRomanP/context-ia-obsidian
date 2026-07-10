@@ -12,7 +12,8 @@ import {
   UpstreamError,
   EmptySelectionError,
 } from "../errors/ApiErrors";
-import { REQUEST_TIMEOUT_MS } from "../config/constants";
+import { REQUEST_TIMEOUT_MS, MAX_INPUT_CHARS } from "../config/constants";
+import { truncateText } from "../utils/truncate";
 
 export class NvidiaLLMService implements LLMPort {
   constructor(
@@ -23,32 +24,34 @@ export class NvidiaLLMService implements LLMPort {
   ) {}
 
   async summarize(context: NoteContext, noteBody: string): Promise<SummaryResult> {
+    const { text: body, truncated } = truncateText(noteBody, MAX_INPUT_CHARS);
     const messages: ChatMessage[] = [
       {
         role: "system",
         content: "Eres un asistente que resume notas de forma clara y estructurada en español.",
       },
-      { role: "user", content: this.buildSummaryPrompt(context, noteBody) },
+      { role: "user", content: this.buildSummaryPrompt(context, body) },
     ];
     const res = await this.chat(messages, { maxTokens: 2048 });
     if (!res.content.trim()) throw new EmptyResponseError("Respuesta vacía del modelo");
-    return { text: res.content, reasoning: res.reasoning, model: this.model };
+    return { text: res.content, reasoning: res.reasoning, model: this.model, truncated };
   }
 
   async explain(selection: string, context: NoteContext): Promise<SummaryResult> {
     const trimmed = selection.trim();
     if (!trimmed) throw new EmptySelectionError("Selecciona el texto que quieres explicar.");
+    const { text: input, truncated } = truncateText(trimmed, MAX_INPUT_CHARS);
 
     const messages: ChatMessage[] = [
       { role: "system", content: "Explicas fragmentos de texto de forma clara y didáctica en español." },
       {
         role: "user",
-        content: `En la nota "${context.title}", explica este fragmento en detalle y con un ejemplo si aplica:\n\n"""${trimmed}"""`,
+        content: `En la nota "${context.title}", explica este fragmento en detalle y con un ejemplo si aplica:\n\n"""${input}"""`,
       },
     ];
     const res = await this.chat(messages, { maxTokens: 1500 });
     if (!res.content.trim()) throw new EmptyResponseError("Respuesta vacía del modelo");
-    return { text: res.content, reasoning: res.reasoning, model: this.model };
+    return { text: res.content, reasoning: res.reasoning, model: this.model, truncated };
   }
 
   async chat(messages: readonly ChatMessage[], opts: ChatOptions = {}): Promise<ChatResponse> {

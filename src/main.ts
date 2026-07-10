@@ -20,6 +20,7 @@ import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
 import { PromptModal } from "./ui/PromptModal";
 import { sanitizeFileNamePart } from "./utils/sanitize";
+import { MIN_ACTION_INTERVAL_MS } from "./config/constants";
 import {
   InvalidKeyError,
   RateLimitError,
@@ -29,9 +30,13 @@ import {
   PayloadTooLargeError,
 } from "./errors/ApiErrors";
 
+const TRUNCATED_NOTICE = "\n\n⚠️ El contenido de entrada se truncó (era demasiado largo).";
+
 export default class ContextIaPlugin extends Plugin {
   declare settings: PluginSettings;
   private vault!: VaultPort;
+  private readonly inFlightCommands = new Set<string>();
+  private readonly lastRunAt = new Map<string, number>();
 
   async onload(): Promise<void> {
     console.info("[Context IA] cargado"); // sin secretos: seguro
@@ -57,12 +62,13 @@ export default class ContextIaPlugin extends Plugin {
       id: "summarize-note",
       name: "Resumir nota activa con IA",
       callback: () =>
-        this.runAction(async (vault, llm) => {
+        this.runAction("summarize-note", async (vault, llm) => {
           const ctx = await vault.getActiveNoteContext();
           if (!ctx) throw new Error("Abre una nota markdown primero.");
           const body = await vault.readNote(ctx.path);
           const result = await llm.summarize(ctx, body);
-          new ResultModal(this.app, `Resumen: ${ctx.title}`, result.text).open();
+          const text = result.truncated ? result.text + TRUNCATED_NOTICE : result.text;
+          new ResultModal(this.app, `Resumen: ${ctx.title}`, text).open();
         }),
     });
 
@@ -70,12 +76,13 @@ export default class ContextIaPlugin extends Plugin {
       id: "explain-selection",
       name: "Explicar selección con IA",
       editorCallback: (editor) =>
-        this.runAction(async (vault, llm) => {
+        this.runAction("explain-selection", async (vault, llm) => {
           const selection = editor.getSelection();
           const ctx = await vault.getActiveNoteContext();
           if (!ctx) throw new Error("Abre una nota markdown primero.");
           const result = await llm.explain(selection, ctx); // lanza EmptySelectionError si vacío
-          new ResultModal(this.app, "Explicación", result.text).open();
+          const text = result.truncated ? result.text + TRUNCATED_NOTICE : result.text;
+          new ResultModal(this.app, "Explicación", text).open();
         }),
     });
 
@@ -83,7 +90,7 @@ export default class ContextIaPlugin extends Plugin {
       id: "research-topic",
       name: "Investigar tema con IA",
       callback: () =>
-        this.runAction(async (_vault, llm, search) => {
+        this.runAction("research-topic", async (_vault, llm, search) => {
           const topic = await PromptModal.open(
             this.app,
             "¿Qué quieres investigar?",
@@ -92,9 +99,10 @@ export default class ContextIaPlugin extends Plugin {
           if (!topic) return; // cancelado, no es error
 
           const result = await new ResearchService(llm, search).research(topic);
-          const body = result.citations.length
+          let body = result.citations.length
             ? result.answer
             : result.answer + "\n\n⚠️ Sin fuentes verificadas para este tema.";
+          if (result.truncated) body += TRUNCATED_NOTICE;
           new ResultModal(
             this.app,
             `Investigación: ${topic}`,
@@ -108,7 +116,7 @@ export default class ContextIaPlugin extends Plugin {
       id: "generate-image",
       name: "Generar imagen explicativa con IA",
       callback: () =>
-        this.runAction(async (vault, _llm, _search, images) => {
+        this.runAction("generate-image", async (vault, _llm, _search, images) => {
           const ctx = await vault.getActiveNoteContext();
           if (!ctx) throw new Error("Abre una nota markdown primero.");
           const prompt = await PromptModal.open(
@@ -153,10 +161,21 @@ export default class ContextIaPlugin extends Plugin {
     return new NvidiaImageService(this.secrets, this.settings.baseUrl, this.settings.imageModel);
   }
 
-  /** Centraliza el manejo de errores de las acciones de IA: nunca un crash silencioso. */
+  /**
+   * Centraliza el manejo de errores de las acciones de IA (nunca un crash silencioso) y las
+   * endurece contra doble-click: ignora reentradas del mismo comando mientras está en curso, y
+   * exige un intervalo mínimo entre ejecuciones consecutivas del mismo comando.
+   */
   private async runAction(
+    commandId: string,
     fn: (vault: VaultPort, llm: LLMPort, search: SearchPort, images: ImagePort) => Promise<void>,
   ): Promise<void> {
+    if (this.inFlightCommands.has(commandId)) return; // ya en curso: ignora el doble-click
+    const lastRun = this.lastRunAt.get(commandId) ?? 0;
+    if (Date.now() - lastRun < MIN_ACTION_INTERVAL_MS) return; // demasiado pronto: ignora
+
+    this.inFlightCommands.add(commandId);
+    const progress = new Notice("⏳ Generando…", 0); // 0 = persistente hasta hide()
     try {
       await fn(this.vault, this.llm, this.search, this.images);
     } catch (e) {
@@ -167,6 +186,10 @@ export default class ContextIaPlugin extends Plugin {
       else if (e instanceof EmptySelectionError) new Notice("✍️ " + e.message);
       else if (e instanceof PayloadTooLargeError) new Notice("📦 " + e.message);
       else new Notice("⚠️ " + (e as Error).message);
+    } finally {
+      progress.hide();
+      this.lastRunAt.set(commandId, Date.now());
+      this.inFlightCommands.delete(commandId);
     }
   }
 

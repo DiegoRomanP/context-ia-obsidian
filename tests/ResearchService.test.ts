@@ -3,7 +3,7 @@ import { ResearchService } from "../src/services/ResearchService";
 import type { LLMPort, ChatMessage, ChatResponse } from "../src/domain/ports/LLMPort";
 import type { SearchPort, SearchHit } from "../src/domain/ports/SearchPort";
 import { InvalidKeyError } from "../src/errors/ApiErrors";
-import { MAX_TOOL_ITERATIONS } from "../src/config/constants";
+import { MAX_TOOL_ITERATIONS, MAX_INPUT_CHARS } from "../src/config/constants";
 
 function fakeLLM(responses: ChatResponse[]): LLMPort {
   let i = 0;
@@ -109,5 +109,16 @@ describe("ResearchService", () => {
       }),
     };
     await expect(new ResearchService(llm, search).research("tema")).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  it("marca truncated=true si un resultado de búsqueda excede MAX_INPUT_CHARS (Fase 7)", async () => {
+    const llm = fakeLLM([
+      { content: "", toolCalls: [{ id: "1", name: "web_search", argumentsJson: '{"query":"x"}' }] },
+      { content: "respuesta [1]", toolCalls: [] },
+    ]);
+    const hugeContent = "a".repeat(MAX_INPUT_CHARS + 1000);
+    const search = fakeSearch([{ title: "T", url: "http://a", content: hugeContent }]);
+    const out = await new ResearchService(llm, search).research("tema");
+    expect(out.truncated).toBe(true);
   });
 });

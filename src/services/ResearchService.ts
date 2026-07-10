@@ -2,7 +2,8 @@ import type { LLMPort, ChatMessage } from "../domain/ports/LLMPort";
 import type { SearchPort, SearchHit } from "../domain/ports/SearchPort";
 import type { ResearchResult, ResearchCitation } from "../domain/models/ResearchResult";
 import { WEB_SEARCH_TOOL } from "../config/tools";
-import { MAX_TOOL_ITERATIONS, MAX_SEARCH_RESULTS } from "../config/constants";
+import { MAX_TOOL_ITERATIONS, MAX_SEARCH_RESULTS, MAX_INPUT_CHARS } from "../config/constants";
+import { truncateText } from "../utils/truncate";
 
 export class ResearchService {
   constructor(
@@ -12,6 +13,7 @@ export class ResearchService {
 
   async research(topic: string): Promise<ResearchResult> {
     const citations: ResearchCitation[] = [];
+    let truncated = false;
     const messages: ChatMessage[] = [
       {
         role: "system",
@@ -27,7 +29,7 @@ export class ResearchService {
       const res = await this.llm.chat(messages, { tools: [WEB_SEARCH_TOOL], toolChoice: "auto" });
 
       if (!res.toolCalls?.length) {
-        return { answer: res.content, citations }; // el modelo terminó
+        return { answer: res.content, citations, truncated }; // el modelo terminó
       }
 
       // Turno del asistente pidiendo las tools (formato OpenAI/vLLM real: tool_calls + luego role "tool").
@@ -52,10 +54,16 @@ export class ResearchService {
           continue;
         }
         const hits = await this.search.search(query, MAX_SEARCH_RESULTS);
-        hits.forEach((h) => citations.push({ title: h.title, url: h.url, snippet: h.content.slice(0, 240) }));
+        // Truncado defensivo: un snippet de búsqueda extremadamente largo no debe exceder el contexto.
+        const processedHits = hits.map((h) => {
+          const { text, truncated: wasTruncated } = truncateText(h.content, MAX_INPUT_CHARS);
+          if (wasTruncated) truncated = true;
+          return { ...h, content: text };
+        });
+        processedHits.forEach((h) => citations.push({ title: h.title, url: h.url, snippet: h.content.slice(0, 240) }));
         messages.push({
           role: "tool",
-          content: this.formatHits(hits),
+          content: this.formatHits(processedHits),
           toolCallId: call.id,
           name: call.name,
         });
@@ -67,7 +75,7 @@ export class ResearchService {
       ...messages,
       { role: "user", content: "Sintetiza ahora la respuesta citando SOLO las fuentes anteriores." },
     ]);
-    return { answer: final.content, citations };
+    return { answer: final.content, citations, truncated };
   }
 
   private formatHits(hits: readonly SearchHit[]): string {
