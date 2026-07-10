@@ -3,6 +3,7 @@ main.js
 *.js.map
 .env
 .env.*
+!.env.example
 data.json
 /test-vault/
 .DS_Store
