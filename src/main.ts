@@ -4,23 +4,29 @@ import type { VaultPort } from "./domain/ports/VaultPort";
 import type { SecretsPort } from "./domain/ports/SecretsPort";
 import type { LLMPort } from "./domain/ports/LLMPort";
 import type { SearchPort } from "./domain/ports/SearchPort";
+import type { ImagePort } from "./domain/ports/ImagePort";
+import type { NoteContext } from "./domain/models/NoteContext";
+import type { ImageResult } from "./domain/models/ImageResult";
 import type { PluginSettings } from "./domain/models/PluginSettings";
 import { DEFAULT_SETTINGS } from "./domain/models/PluginSettings";
 import { NoteContextService } from "./services/NoteContextService";
 import { NvidiaLLMService } from "./services/NvidiaLLMService";
 import { TavilySearchService } from "./services/TavilySearchService";
 import { ResearchService } from "./services/ResearchService";
+import { NvidiaImageService } from "./services/NvidiaImageService";
 import { DotenvSecretsAdapter } from "./secrets/DotenvSecretsAdapter";
 import { SettingsSecretsAdapter } from "./secrets/SettingsSecretsAdapter";
 import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
 import { PromptModal } from "./ui/PromptModal";
+import { sanitizeFileNamePart } from "./utils/sanitize";
 import {
   InvalidKeyError,
   RateLimitError,
   NetworkError,
   EmptyResponseError,
   EmptySelectionError,
+  PayloadTooLargeError,
 } from "./errors/ApiErrors";
 
 export default class ContextIaPlugin extends Plugin {
@@ -97,6 +103,25 @@ export default class ContextIaPlugin extends Plugin {
           ).open();
         }),
     });
+
+    this.addCommand({
+      id: "generate-image",
+      name: "Generar imagen explicativa con IA",
+      callback: () =>
+        this.runAction(async (vault, _llm, _search, images) => {
+          const ctx = await vault.getActiveNoteContext();
+          if (!ctx) throw new Error("Abre una nota markdown primero.");
+          const prompt = await PromptModal.open(
+            this.app,
+            "Describe la imagen a generar",
+            `Diagrama explicativo de: ${ctx.title}`,
+          );
+          if (!prompt) return; // cancelado
+          const result = await images.generate(prompt, "1024x1024");
+          await this.insertImage(result, ctx);
+          new Notice("🖼️ Imagen insertada.");
+        }),
+    });
   }
 
   async onunload(): Promise<void> {}
@@ -123,20 +148,39 @@ export default class ContextIaPlugin extends Plugin {
     return new TavilySearchService(this.secrets);
   }
 
+  /** Servicio de generación de imágenes vigente (mismo host/credencial que llm). */
+  get images(): ImagePort {
+    return new NvidiaImageService(this.secrets, this.settings.baseUrl, this.settings.imageModel);
+  }
+
   /** Centraliza el manejo de errores de las acciones de IA: nunca un crash silencioso. */
   private async runAction(
-    fn: (vault: VaultPort, llm: LLMPort, search: SearchPort) => Promise<void>,
+    fn: (vault: VaultPort, llm: LLMPort, search: SearchPort, images: ImagePort) => Promise<void>,
   ): Promise<void> {
     try {
-      await fn(this.vault, this.llm, this.search);
+      await fn(this.vault, this.llm, this.search, this.images);
     } catch (e) {
       if (e instanceof InvalidKeyError) new Notice("🔑 " + e.message);
       else if (e instanceof RateLimitError) new Notice("⏳ " + e.message);
       else if (e instanceof NetworkError) new Notice("📡 " + e.message);
       else if (e instanceof EmptyResponseError) new Notice("🕳️ El modelo no devolvió contenido.");
       else if (e instanceof EmptySelectionError) new Notice("✍️ " + e.message);
+      else if (e instanceof PayloadTooLargeError) new Notice("📦 " + e.message);
       else new Notice("⚠️ " + (e as Error).message);
     }
+  }
+
+  /** Guarda la imagen como attachment saneado y la ancla en la nota como embed. */
+  private async insertImage(result: ImageResult, ctx: NoteContext): Promise<void> {
+    const folder = "attachments";
+    await this.app.vault.adapter.mkdir(folder).catch(() => {}); // idempotente
+    const safeTitle = sanitizeFileNamePart(ctx.title);
+    const name = `${folder}/ia-${safeTitle}-${Date.now()}.png`;
+    // .slice() copia los bytes a un ArrayBuffer propio (offset 0, longitud exacta): evita escribir
+    // el pool interno de Node completo si Buffer.from reusó un buffer compartido más grande.
+    await this.app.vault.createBinary(name, result.bytes.slice().buffer as ArrayBuffer);
+    const editor = this.app.workspace.activeEditor?.editor;
+    editor?.replaceSelection(`\n![[${name}]]\n`);
   }
 
   async loadSettings(): Promise<void> {
