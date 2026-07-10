@@ -3,14 +3,18 @@ import path from "path";
 import type { VaultPort } from "./domain/ports/VaultPort";
 import type { SecretsPort } from "./domain/ports/SecretsPort";
 import type { LLMPort } from "./domain/ports/LLMPort";
+import type { SearchPort } from "./domain/ports/SearchPort";
 import type { PluginSettings } from "./domain/models/PluginSettings";
 import { DEFAULT_SETTINGS } from "./domain/models/PluginSettings";
 import { NoteContextService } from "./services/NoteContextService";
 import { NvidiaLLMService } from "./services/NvidiaLLMService";
+import { TavilySearchService } from "./services/TavilySearchService";
+import { ResearchService } from "./services/ResearchService";
 import { DotenvSecretsAdapter } from "./secrets/DotenvSecretsAdapter";
 import { SettingsSecretsAdapter } from "./secrets/SettingsSecretsAdapter";
 import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
+import { PromptModal } from "./ui/PromptModal";
 import {
   InvalidKeyError,
   RateLimitError,
@@ -68,6 +72,31 @@ export default class ContextIaPlugin extends Plugin {
           new ResultModal(this.app, "Explicación", result.text).open();
         }),
     });
+
+    this.addCommand({
+      id: "research-topic",
+      name: "Investigar tema con IA",
+      callback: () =>
+        this.runAction(async (_vault, llm, search) => {
+          const topic = await PromptModal.open(
+            this.app,
+            "¿Qué quieres investigar?",
+            "Ej: arquitectura hexagonal en TypeScript",
+          );
+          if (!topic) return; // cancelado, no es error
+
+          const result = await new ResearchService(llm, search).research(topic);
+          const body = result.citations.length
+            ? result.answer
+            : result.answer + "\n\n⚠️ Sin fuentes verificadas para este tema.";
+          new ResultModal(
+            this.app,
+            `Investigación: ${topic}`,
+            body,
+            result.citations.map((c) => ({ title: c.title, url: c.url })),
+          ).open();
+        }),
+    });
   }
 
   async onunload(): Promise<void> {}
@@ -89,10 +118,17 @@ export default class ContextIaPlugin extends Plugin {
     );
   }
 
+  /** Servicio de búsqueda vigente (usa TAVILY_API_KEY vía el mismo SecretsPort). */
+  get search(): SearchPort {
+    return new TavilySearchService(this.secrets);
+  }
+
   /** Centraliza el manejo de errores de las acciones de IA: nunca un crash silencioso. */
-  private async runAction(fn: (vault: VaultPort, llm: LLMPort) => Promise<void>): Promise<void> {
+  private async runAction(
+    fn: (vault: VaultPort, llm: LLMPort, search: SearchPort) => Promise<void>,
+  ): Promise<void> {
     try {
-      await fn(this.vault, this.llm);
+      await fn(this.vault, this.llm, this.search);
     } catch (e) {
       if (e instanceof InvalidKeyError) new Notice("🔑 " + e.message);
       else if (e instanceof RateLimitError) new Notice("⏳ " + e.message);

@@ -16,4 +16,4 @@ jobs:
       - run: npm run build
       - name: Verificar que el bundle no contiene secretos
         run: |
-          if grep -R "nvapi-" main.js; then echo "❌ Secreto en bundle"; exit 1; fi
+          if grep -RE "nvapi-|tvly-" main.js; then echo "❌ Secreto en bundle"; exit 1; fi

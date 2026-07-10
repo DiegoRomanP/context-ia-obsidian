@@ -1,9 +1,21 @@
 import type { NoteContext } from "../models/NoteContext";
 import type { SummaryResult } from "../models/SummaryResult";
 
+export interface ToolCallRequest {
+  readonly id: string;
+  readonly type: "function";
+  readonly function: { readonly name: string; readonly arguments: string };
+}
+
 export interface ChatMessage {
-  readonly role: "system" | "user" | "assistant";
-  readonly content: string;
+  readonly role: "system" | "user" | "assistant" | "tool";
+  readonly content: string | null;
+  /** Solo en mensajes role "assistant" que piden ejecutar tools (formato OpenAI/vLLM). */
+  readonly toolCalls?: readonly ToolCallRequest[];
+  /** Solo en mensajes role "tool": a qué llamada responde. */
+  readonly toolCallId?: string;
+  /** Solo en mensajes role "tool": nombre de la función invocada. */
+  readonly name?: string;
 }
 
 export interface LLMPort {

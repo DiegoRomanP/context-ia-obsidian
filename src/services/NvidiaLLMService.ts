@@ -57,7 +57,17 @@ export class NvidiaLLMService implements LLMPort {
 
     const body = {
       model: this.model,
-      messages,
+      // Mapeo explícito al formato OpenAI/vLLM real (confirmado: vLLM, motor de NIM,
+      // espera tool_calls / tool_call_id en snake_case, no los nombres internos camelCase).
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        ...(m.toolCalls
+          ? { tool_calls: m.toolCalls.map((tc) => ({ id: tc.id, type: tc.type, function: tc.function })) }
+          : {}),
+        ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+        ...(m.name ? { name: m.name } : {}),
+      })),
       temperature: 1,
       top_p: 0.95,
       max_tokens: opts.maxTokens ?? 4096,
