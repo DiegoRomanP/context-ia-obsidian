@@ -7,16 +7,19 @@ y este proyecto usa [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-### Corregido
+### Cambiado
 
-- **Generar imagen**: `qwen/qwen-image` no tiene función cloud invocable
-  (`nvcfFunctionId: "None"` en el catálogo de NVIDIA — solo self-host del
-  contenedor NIM). Se reemplaza por `black-forest-labs/flux.2-klein-4b`, que
-  sí se invoca directamente. También se corrige el host: los modelos de
-  imagen "Visual GenAI" de NVIDIA se sirven en `ai.api.nvidia.com/v1/genai`
-  con un formato nativo (`{prompt, width, height, seed, steps}` →
-  `artifacts[0].base64`, JPEG), distinto del host/formato OpenAI-compatible
-  de `chat/completions`.
+- **Generar imagen**: se reemplaza NVIDIA NIM por completo como proveedor de
+  imagen. Primero se descartó `qwen/qwen-image` (`nvcfFunctionId: "None"` en
+  el catálogo — solo self-host); `black-forest-labs/flux.2-klein-4b` sí se
+  invocaba directamente pero resultó inestable/no disponible de forma
+  consistente en la capa gratuita. Se reemplaza por `krea/Krea-2-Turbo` vía
+  **Hugging Face Inference Providers** (servido por `fal-ai`), usando el SDK
+  oficial `@huggingface/inference` en `HuggingFaceImageService` — la única
+  excepción a la regla de "solo `requestUrl`, nunca SDKs/`fetch`" del
+  proyecto, justificada porque el contrato HTTP crudo de Inference Providers
+  para tareas no-chat no está documentado como estable entre proveedores.
+  Requiere una nueva clave `HF_TOKEN`.
 
 ## [0.1.0] - 2026-07-10
 

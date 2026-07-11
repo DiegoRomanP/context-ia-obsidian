@@ -1,4 +1,4 @@
-export type SecretKey = "NVIDIA_API_KEY" | "TAVILY_API_KEY";
+export type SecretKey = "NVIDIA_API_KEY" | "TAVILY_API_KEY" | "HF_TOKEN";
 
 export interface SecretsPort {
   /** Devuelve la clave o null si no está configurada. Nunca lanza por "no encontrada". */

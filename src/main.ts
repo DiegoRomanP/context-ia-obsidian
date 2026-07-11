@@ -13,14 +13,14 @@ import { NoteContextService } from "./services/NoteContextService";
 import { NvidiaLLMService } from "./services/NvidiaLLMService";
 import { TavilySearchService } from "./services/TavilySearchService";
 import { ResearchService } from "./services/ResearchService";
-import { NvidiaImageService } from "./services/NvidiaImageService";
+import { HuggingFaceImageService } from "./services/HuggingFaceImageService";
 import { DotenvSecretsAdapter } from "./secrets/DotenvSecretsAdapter";
 import { SettingsSecretsAdapter } from "./secrets/SettingsSecretsAdapter";
 import { ResultModal } from "./ui/ResultModal";
 import { SettingsTab } from "./ui/SettingsTab";
 import { PromptModal } from "./ui/PromptModal";
 import { sanitizeFileNamePart } from "./utils/sanitize";
-import { MIN_ACTION_INTERVAL_MS, DEFAULT_IMAGE_BASE_URL } from "./config/constants";
+import { MIN_ACTION_INTERVAL_MS } from "./config/constants";
 import {
   InvalidKeyError,
   RateLimitError,
@@ -157,12 +157,12 @@ export default class ContextIaPlugin extends Plugin {
   }
 
   /**
-   * Servicio de generación de imágenes vigente. Usa un host DISTINTO al de llm/search:
-   * los modelos de imagen de NVIDIA ("Visual GenAI") se sirven en ai.api.nvidia.com,
-   * no en el host OpenAI-compatible de chat/completions.
+   * Servicio de generación de imágenes vigente. Proveedor DISTINTO al de llm/search (Hugging
+   * Face Inference Providers, no NVIDIA) — ver el comentario en HuggingFaceImageService sobre
+   * por qué este adapter usa el SDK oficial en vez de requestUrl.
    */
   get images(): ImagePort {
-    return new NvidiaImageService(this.secrets, DEFAULT_IMAGE_BASE_URL, this.settings.imageModel);
+    return new HuggingFaceImageService(this.secrets, this.settings.imageModel);
   }
 
   /**
@@ -202,7 +202,7 @@ export default class ContextIaPlugin extends Plugin {
     const folder = "attachments";
     await this.app.vault.adapter.mkdir(folder).catch(() => {}); // idempotente
     const safeTitle = sanitizeFileNamePart(ctx.title);
-    const ext = result.mimeType === "image/png" ? "png" : "jpg";
+    const ext = extensionForMimeType(result.mimeType);
     const name = `${folder}/ia-${safeTitle}-${Date.now()}.${ext}`;
     // .slice() copia los bytes a un ArrayBuffer propio (offset 0, longitud exacta): evita escribir
     // el pool interno de Node completo si Buffer.from reusó un buffer compartido más grande.
@@ -232,4 +232,15 @@ export default class ContextIaPlugin extends Plugin {
     const basePath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : "";
     return path.join(basePath, this.manifest.dir ?? "", ".env");
   }
+}
+
+const MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+/** El proveedor de imagen puede variar el formato real devuelto; se deriva del mimeType real. */
+function extensionForMimeType(mimeType: string): string {
+  return MIME_EXTENSIONS[mimeType] ?? "jpg";
 }

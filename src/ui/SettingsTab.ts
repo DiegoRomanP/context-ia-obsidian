@@ -50,6 +50,7 @@ export class SettingsTab extends PluginSettingTab {
     } else {
       this.addSecretField(containerEl, "NVIDIA_API_KEY");
       this.addSecretField(containerEl, "TAVILY_API_KEY");
+      this.addSecretField(containerEl, "HF_TOKEN");
     }
 
     new Setting(containerEl)

@@ -59,7 +59,7 @@ src/
   domain/
     models/             # DTOs inmutables (NoteContext, SummaryResult, ResearchResult, ImageResult...)
     ports/               # Interfaces: VaultPort, SecretsPort, LLMPort, SearchPort, ImagePort
-  services/              # Adapters que implementan los puertos (NvidiaLLMService, TavilySearchService...)
+  services/              # Adapters que implementan los puertos (NvidiaLLMService, HuggingFaceImageService...)
   secrets/               # Adapters de secretos (.env / Secret Storage nativo de Obsidian)
   ui/                    # Modals y pestaña de settings
   config/                # Constantes y definiciones de tools (sin magic numbers)
@@ -69,24 +69,31 @@ tests/                   # Espejo de src/, con la API de Obsidian mockeada
 docs/plan/               # Documentación de diseño y planificación por fase
 ```
 
-### Proveedor de IA
+### Proveedores de IA
 
-Todas las llamadas usan [NVIDIA NIM](https://build.nvidia.com) vía `requestUrl`
+Texto y búsqueda usan [NVIDIA NIM](https://build.nvidia.com) vía `requestUrl`
 de Obsidian — nunca `fetch` ni un SDK propietario, para evitar problemas de
-CORS. El texto y la imagen usan **hosts y formatos distintos**: chat es
-OpenAI-compatible; imagen es el formato nativo "Visual GenAI" de NVIDIA:
+CORS. La imagen es la única excepción: usa el SDK oficial
+[`@huggingface/inference`](https://huggingface.co/docs/huggingface.js/inference/README),
+porque el contrato HTTP crudo de *Inference Providers* para tareas que no son
+chat (como text-to-image) no está documentado como estable entre proveedores
+de terceros — el propio Hugging Face recomienda su cliente oficial para eso.
+El riesgo de CORS que la regla evita no aplica aquí: el playground web de
+Hugging Face llama a este mismo endpoint vía `fetch` desde el navegador.
 
-| Función | Modelo | Host |
+| Función | Modelo | Proveedor |
 |---|---|---|
-| Resumir / Explicar / Investigar | `deepseek-ai/deepseek-v4-flash` | `integrate.api.nvidia.com` (OpenAI-compatible) |
-| Generar imagen | `black-forest-labs/flux.2-klein-4b` | `ai.api.nvidia.com/v1/genai` (formato nativo) |
-| Búsqueda web (soporte de Investigar) | [Tavily](https://tavily.com) | — |
+| Resumir / Explicar / Investigar | `deepseek-ai/deepseek-v4-flash` | NVIDIA NIM (`integrate.api.nvidia.com`, OpenAI-compatible) |
+| Generar imagen | `krea/Krea-2-Turbo` | Hugging Face Inference Providers (servido por `fal-ai`) |
+| Búsqueda web (soporte de Investigar) | — | [Tavily](https://tavily.com) |
 
 ## Requisitos
 
 - [Obsidian](https://obsidian.md) **≥ 1.11.4** (requerido por la Secret Storage API nativa)
 - Node.js **20+** para desarrollo
-- Una clave de API de NVIDIA NIM (gratuita) y, opcionalmente, de Tavily (para Investigar)
+- Una clave de API de NVIDIA NIM (gratuita), un token de Hugging Face
+  (`HF_TOKEN`, gratuito, con permiso "Make calls to Inference Providers") y,
+  opcionalmente, de Tavily (para Investigar)
 
 ## Instalación (para desarrollo)
 
@@ -106,8 +113,9 @@ Luego, en Obsidian: **Settings → Community plugins** → activa "Context IA".
 ## Configuración
 
 Al abrir la pestaña de settings del plugin verás un aviso de privacidad: el
-contenido relevante de tu nota se envía a NVIDIA NIM al usar las acciones de
-IA — no lo uses con información sensible.
+contenido relevante de tu nota se envía a NVIDIA NIM (texto) o a Hugging Face
+Inference Providers (imagen) al usar las acciones de IA — no lo uses con
+información sensible.
 
 ### Claves de API
 
@@ -119,6 +127,7 @@ Dos formas de configurarlas, elegibles desde settings:
    ```env
    NVIDIA_API_KEY=nvapi-tu-clave-aqui
    TAVILY_API_KEY=tvly-tu-clave-aqui
+   HF_TOKEN=hf_tu-token-aqui
    ```
 
    El archivo **nunca** se sube al repositorio (protegido por `.gitignore` y

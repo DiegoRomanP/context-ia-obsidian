@@ -8,9 +8,14 @@ import { join } from "path";
 const mainJsPath = join(__dirname, "..", "main.js");
 
 describe.skipIf(!existsSync(mainJsPath))("bundle de producción (defensa en profundidad)", () => {
-  it("no contiene patrones de secreto conocidos (nvapi-/tvly-)", () => {
+  it("no contiene patrones de secreto conocidos (nvapi-/tvly-/hf_)", () => {
     const content = readFileSync(mainJsPath, "utf8");
     expect(content).not.toMatch(/nvapi-[a-zA-Z0-9]/);
     expect(content).not.toMatch(/tvly-[a-zA-Z0-9]/);
+    // El SDK @huggingface/inference bundlea identificadores internos legítimos con este
+    // prefijo (hf_hub, hf_hub_download, hf_token_placeholder...), así que un patrón laxo de
+    // un solo carácter (como el de nvapi-/tvly- arriba) daría falsos positivos. Un token real
+    // de HF es "hf_" + ~34 caracteres alfanuméricos contiguos, sin guiones bajos de por medio.
+    expect(content).not.toMatch(/hf_[A-Za-z0-9]{20,}/);
   });
 });
