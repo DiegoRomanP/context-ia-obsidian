@@ -11,7 +11,7 @@ export interface PluginSettings {
   readonly envPath: string; // ruta del .env si secretSource === "dotenv"
   readonly baseUrl: string; // https://integrate.api.nvidia.com/v1
   readonly textModel: string; // deepseek-ai/deepseek-v4-flash
-  readonly imageModel: string; // qwen-image
+  readonly imageModel: string; // black-forest-labs/flux.2-klein-4b (host distinto: ver DEFAULT_IMAGE_BASE_URL)
   readonly reasoningEffort: ReasoningEffort;
   readonly privacyAck: boolean; // el usuario aceptó el aviso de envío de datos
 }

@@ -71,15 +71,16 @@ docs/plan/               # Documentación de diseño y planificación por fase
 
 ### Proveedor de IA
 
-Todas las llamadas usan [NVIDIA NIM](https://build.nvidia.com) (API compatible
-con OpenAI) vía `requestUrl` de Obsidian — nunca `fetch` ni un SDK propietario,
-para evitar problemas de CORS:
+Todas las llamadas usan [NVIDIA NIM](https://build.nvidia.com) vía `requestUrl`
+de Obsidian — nunca `fetch` ni un SDK propietario, para evitar problemas de
+CORS. El texto y la imagen usan **hosts y formatos distintos**: chat es
+OpenAI-compatible; imagen es el formato nativo "Visual GenAI" de NVIDIA:
 
-| Función | Modelo |
-|---|---|
-| Resumir / Explicar / Investigar | `deepseek-ai/deepseek-v4-flash` |
-| Generar imagen | `qwen/qwen-image` |
-| Búsqueda web (soporte de Investigar) | [Tavily](https://tavily.com) |
+| Función | Modelo | Host |
+|---|---|---|
+| Resumir / Explicar / Investigar | `deepseek-ai/deepseek-v4-flash` | `integrate.api.nvidia.com` (OpenAI-compatible) |
+| Generar imagen | `black-forest-labs/flux.2-klein-4b` | `ai.api.nvidia.com/v1/genai` (formato nativo) |
+| Búsqueda web (soporte de Investigar) | [Tavily](https://tavily.com) | — |
 
 ## Requisitos
 

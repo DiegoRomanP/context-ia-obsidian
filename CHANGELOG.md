@@ -5,6 +5,19 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto usa [Versionado Semántico](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+### Corregido
+
+- **Generar imagen**: `qwen/qwen-image` no tiene función cloud invocable
+  (`nvcfFunctionId: "None"` en el catálogo de NVIDIA — solo self-host del
+  contenedor NIM). Se reemplaza por `black-forest-labs/flux.2-klein-4b`, que
+  sí se invoca directamente. También se corrige el host: los modelos de
+  imagen "Visual GenAI" de NVIDIA se sirven en `ai.api.nvidia.com/v1/genai`
+  con un formato nativo (`{prompt, width, height, seed, steps}` →
+  `artifacts[0].base64`, JPEG), distinto del host/formato OpenAI-compatible
+  de `chat/completions`.
+
 ## [0.1.0] - 2026-07-10
 
 Primera versión funcional del plugin: lee la nota activa y sus relaciones, y ofrece
